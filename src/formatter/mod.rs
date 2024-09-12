@@ -1,230 +1,169 @@
-use logos::Logos;
-use std::fmt::Display;
+use pest::{iterators::Pair, Parser, Span};
+use pest_derive::Parser;
 
-#[derive(Debug, Logos, Clone, PartialEq, Eq)]
-#[logos(skip r"\s+")]
-pub enum Token<'a> {
-    #[regex(r#"INSERT\s+INTO"#, ignore(case))]
-    #[token("UPDATE", ignore(case))]
-    #[regex(r#"DELETE(?:\s+FROM)"#, ignore(case))]
-    #[regex(r#"SELECT\s+(DISTINCT)?(\s+TOP\s+\d+)?"#, priority = 3, ignore(case))]
-    #[token("FROM", ignore(case))]
-    #[token("WHERE", ignore(case))]
-    #[regex(r#"ORDER(?:\s+BY)"#, ignore(case))]
-    #[regex(r#"GROUP(?:\s+BY)"#, ignore(case))]
-    #[token("HAVING", ignore(case))]
-    #[token("AND", ignore(case))]
-    #[token("SET", ignore(case))]
-    #[token("VALUES", ignore(case))]
-    #[token("OFFSET", ignore(case))]
-    #[token("LIMIT", ignore(case))]
-    #[token("JOIN", ignore(case))]
-    #[token("ON", ignore(case))]
-    #[token("CASE", ignore(case))]
-    #[token("WHEN", ignore(case))]
-    #[token("ELSE", ignore(case))]
-    #[token("THEN", ignore(case))]
-    #[token("END", ignore(case))]
-    #[token("OR", ignore(case))]
-    BlockKeyword(&'a str),
+#[derive(Parser)]
+#[grammar = "grammar/sql.pest"]
+struct SQLParser;
 
-    #[token("BETWEEN", ignore(case))]
-    #[token("IN", ignore(case))]
-    #[token("NOT", ignore(case))]
-    #[token("IS", ignore(case))]
-    #[token("LIKE", ignore(case))]
-    #[token("NULL", ignore(case))]
-    #[token("EXISTS", ignore(case))]
-    InlineKeyword(&'a str),
-
-    #[regex(r#""([^"\\]*(\\.[^"\\]*)*)""#)]
-    #[regex(r#"'([^'\\]*(\\.[^'\\]*)*)'"#)]
-    #[regex(r#"\S+"#, priority = 1)]
-    #[token("+", priority = 2)]
-    #[token("-", priority = 2)]
-    #[token("/", priority = 2)]
-    #[token(">", priority = 2)]
-    #[token("<", priority = 2)]
-    #[token("=", priority = 2)]
-    #[token("<>", priority = 2)]
-    #[token("<=", priority = 2)]
-    #[token(">=", priority = 2)]
-    #[token("!=", priority = 2)]
-    Identifier(&'a str),
-
-    #[token(",", priority = 2)]
-    Comma,
-
-    #[token("(", priority = 2)]
-    OpenParen,
-
-    #[token(")", priority = 2)]
-    CloseParen,
-
-    #[token(";", priority = 2)]
-    Delimiter,
-
-    #[regex(r#"\/\*([^*]|\*[^\/])+\*\/"#)]
-    BlockComment(&'a str),
+pub enum IndentationType {
+    Standard,
+    Tabbed,
 }
 
-impl<'a> Display for Token<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Token::Comma => write!(f, ",")?,
-            Token::OpenParen => write!(f, "(")?,
-            Token::CloseParen => write!(f, ")")?,
-            Token::Delimiter => write!(f, ";")?,
-            Token::BlockComment(s) => write!(f, "{}", s.trim())?,
-            Token::Identifier(s) => write!(f, "{}", s.trim())?,
-            Token::InlineKeyword(s) => write!(f, "{}", s.trim().to_lowercase())?,
-            Token::BlockKeyword(s) => write!(
-                f,
-                "{}",
-                s.trim()
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()
-                    .join(" ")
-                    .to_lowercase()
-            )?,
-        };
+pub struct SQLFormatter {
+    indentation: IndentationType,
+}
 
-        Ok(())
+impl SQLFormatter {
+    pub fn new(indentation: IndentationType) -> Self {
+        Self { indentation }
     }
-}
 
-#[derive(Debug, PartialEq, Eq)]
-enum LineType<'a> {
-    Inline(Vec<Token<'a>>),
-    Subquery(Vec<Line<'a>>),
-    Empty,
-}
+    pub fn format_string(&self, sql: &str) -> Result<String, pest::error::Error<Rule>> {
+        let tree = SQLParser::parse(Rule::query, sql)?.next().unwrap();
 
-#[derive(Debug, PartialEq, Eq)]
-struct Line<'a> {
-    block: Token<'a>,
-    tokens: LineType<'a>,
-    indent: usize,
-}
-
-impl<'a> Line<'a> {
-    fn new(block: Token<'a>) -> Self {
-        Self {
-            block,
-            tokens: LineType::Empty,
-            indent: 0,
-        }
+        Ok(tree
+            .into_inner()
+            .map(|pair| self.format_rule(pair, 0))
+            .collect::<Vec<String>>()
+            .join("\n\n"))
     }
-}
 
-impl<'a> Display for Line<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.block)?;
-        match self.block {
-            Token::BlockKeyword(_) => {
-                if self.tokens != LineType::Empty {
-                    write!(f, "\n")?;
-                }
+    #[allow(dead_code)]
+    pub fn format_file(&self, path: &str) -> Result<String, pest::error::Error<Rule>> {
+        let sql = std::fs::read_to_string(path).map_err(|_| {
+            pest::error::Error::new_from_span(
+                pest::error::ErrorVariant::CustomError {
+                    message: "Failed to read file".to_string(),
+                },
+                Span::new("", 0, 0).unwrap(),
+            )
+        })?;
+        self.format_string(&sql)
+    }
+
+    fn format_rule(&self, rule: Pair<Rule>, level: usize) -> String {
+        match rule.as_rule() {
+            Rule::EOI => String::new(),
+            Rule::COMMENT => todo!(),
+            Rule::open_paren | Rule::close_paren | Rule::comma => {
+                String::from("\n") + &"\t".repeat(level) + rule.as_str()
             }
-            _ => (),
-        }
-
-        match &self.tokens {
-            LineType::Inline(tokens) => {
-                if tokens.len() > 0 {
-                    write!(f, "\t")?;
-                }
-
-                write!(
-                    f,
-                    "{}",
-                    tokens
-                        .iter()
-                        .map(|token| token.to_string())
-                        .collect::<Vec<String>>()
+            Rule::double_quote
+            | Rule::single_quote
+            | Rule::delimiter
+            | Rule::identifier
+            | Rule::string
+            | Rule::quoted
+            | Rule::select_kw
+            | Rule::distinct_kw
+            | Rule::top_kw
+            | Rule::insert_kw
+            | Rule::into_kw
+            | Rule::values_kw
+            | Rule::update_kw
+            | Rule::set_kw
+            | Rule::delete_kw
+            | Rule::from_kw
+            | Rule::relate_kw
+            | Rule::where_kw
+            | Rule::and_kw
+            | Rule::or_kw
+            | Rule::by_kw
+            | Rule::group_kw
+            | Rule::order_kw
+            | Rule::desc_kw
+            | Rule::asc_kw
+            | Rule::inline_kw
+            | Rule::between_kw
+            | Rule::in_kw
+            | Rule::not_kw
+            | Rule::is_kw
+            | Rule::like_kw
+            | Rule::null_kw
+            | Rule::exists_kw
+            | Rule::operator => rule.as_str().to_string(),
+            Rule::block => self.format_rule(rule.into_inner().next().unwrap(), level),
+            Rule::insert_block
+            | Rule::select_block
+            | Rule::update_block
+            | Rule::delete_block
+            | Rule::from_block
+            | Rule::relate_block
+            | Rule::where_block
+            | Rule::and_block
+            | Rule::or_block
+            | Rule::values_block
+            | Rule::set_block
+            | Rule::group_by_block
+            | Rule::order_by_block => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<_>(),
+            Rule::select_compound
+            | Rule::insert_into_compound
+            | Rule::delete_from_compound
+            | Rule::group_by_compound
+            | Rule::order_by_compound => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::function => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::inline_item | Rule::table_identifier => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::list => {
+                String::from("\t")
+                    + &rule
+                        .into_inner()
+                        .map(|pair| self.format_rule(pair, level))
+                        .collect::<Vec<_>>()
                         .join(" ")
-                )?;
             }
-            LineType::Subquery(lines) => {
-                for (i, line) in lines.iter().enumerate() {
-                    if i == 0 {
-                        write!(f, "\t")?;
-                    }
-
-                    write!(f, "{}", line)?;
-                }
+            Rule::subquery => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::item_list => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::subclause => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::clause => {
+                let mut pairs = rule.into_inner();
+                return match pairs.next().unwrap().as_rule() {
+                    Rule::subclause => self.format_rule(pairs.next().unwrap(), level),
+                    _ => pairs
+                        .map(|pair| self.format_rule(pair, level))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                };
             }
-            LineType::Empty => (),
-        }
-
-        Ok(())
-    }
-}
-
-pub fn format_sql(sql: &str) -> Result<String, std::ops::Range<usize>> {
-    let mut lexer = Token::lexer(&sql);
-    let mut lines: Vec<Line> = Vec::new();
-
-    let mut last_line: Option<&mut Line> = None;
-
-    while let Some(token) = lexer.next() {
-        match token.clone() {
-            Ok(token) => match token {
-                Token::BlockKeyword(_) => {
-                    let last_line = lines.last_mut();
-                    if let Some(last_line) = last_line {
-                        if last_line.block == Token::OpenParen
-                            && last_line.tokens == LineType::Empty
-                        {
-                            last_line.tokens = LineType::Subquery(vec![Line::new(token)]);
-                            continue;
-                        }
-                    }
-
-                    lines.push(Line::new(token));
-                }
-                Token::InlineKeyword(_) | Token::Identifier(_) => {
-                    let last_line = last_line.ok_or(lexer.span())?;
-                    match &mut last_line.tokens {
-                        LineType::Subquery(_) => return Err(lexer.span()),
-                        LineType::Inline(v) => v.push(token),
-                        LineType::Empty => last_line.tokens = LineType::Inline(vec![token]),
-                    }
-                }
-                Token::Comma => {
-                    lines.push(Line::new(token));
-                    last_line = Some(lines.last_mut().unwrap());
-                }
-                Token::OpenParen => {
-                    let mut new_line = Line::new(token);
-                    lines.push(new_line);
-                    last_line = Some(&mut new_line);
-                }
-                Token::CloseParen => {
-                    let mut new_line = Line::new(token);
-                    lines.push(new_line);
-                    last_line = Some(&mut new_line);
-                }
-                Token::Delimiter => {
-                    let mut new_line = Line::new(token);
-                    lines.push(new_line);
-                    last_line = Some(&mut new_line);
-                }
-                Token::BlockComment(_) => {
-                    let mut new_line = Line::new(token);
-                    lines.push(new_line);
-                    last_line = Some(&mut new_line);
-                }
-            },
-            Err(_) => return Err(lexer.span()),
+            Rule::statement => rule
+                .into_inner()
+                .map(|pair| match pair.as_rule() {
+                    Rule::block => self.format_rule(pair, level),
+                    Rule::delimiter => self.format_rule(pair, level),
+                    _ => todo!("Unexpected rule: {:?}", pair.as_rule()),
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+            _ => todo!("Unexpected rule: {:?}", rule.as_rule()),
         }
     }
-
-    Ok(lines
-        .iter()
-        .map(|line| line.to_string())
-        .collect::<Vec<String>>()
-        .join("\n"))
 }
 
 #[cfg(test)]
@@ -238,8 +177,9 @@ mod tests {
 
     #[test]
     fn test_format_sql() {
-        let sql = read_to_string("docs/robert.sql").unwrap();
-        let formatted = format_sql(&sql);
+        let sql = read_to_string("docs/output.sql").unwrap();
+        let formatter = SQLFormatter::new(IndentationType::Tabbed);
+        let formatted = formatter.format_string(&sql);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -250,11 +190,7 @@ mod tests {
             Ok(formatted) => file
                 .write_all(formatted.as_bytes())
                 .expect("Failed to write to file"),
-            Err(err_span) => println!(
-                "Failed to format SQL, error at {:?}. '{}'",
-                err_span.clone(),
-                sql.get(err_span).unwrap()
-            ),
+            Err(err) => println!("{:?}", err),
         }
 
         assert_eq!(formatted.unwrap(), sql);

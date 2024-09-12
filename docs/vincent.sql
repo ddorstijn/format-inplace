@@ -1,9 +1,9 @@
 insert
 into	notification_relation
-	(	notification_id
-	,	relation_id
-	,	active_yn
-	) 
+(	notification_id
+,	relation_id
+,	active_yn
+) 
 select	par.notification_id "NOTIFICATION_ID"
 ,	r.relation_id "RELATION_ID"
 ,	'Y' "ACTIVE_YN" 

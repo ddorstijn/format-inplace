@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 get-selected-text = "0.1.6"
-logos = "0.14.1"
-petgraph = "0.6.5"
+pest = { version = "2.7.12", features = ["pretty-print"] }
+pest_derive = "2.7.12"
 windows-hotkeys = "0.2.1"
