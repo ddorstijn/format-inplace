@@ -1,22 +1,46 @@
+use clap::ValueEnum;
+use std::{fmt::Display, path::Path};
+
 use pest::{iterators::Pair, Parser, Span};
 use pest_derive::Parser;
+
+struct Line {
+    indent: u8,
+    block: String,
+    inline: Vec<String>,
+}
+
+impl Display for Line {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}{}",
+            "\t".repeat(self.indent as usize),
+            self.block,
+            self.inline.join(" ")
+        )
+    }
+}
 
 #[derive(Parser)]
 #[grammar = "grammar/sql.pest"]
 struct SQLParser;
 
+#[derive(ValueEnum, Debug, Clone, Copy)]
 pub enum IndentationType {
     Standard,
     Tabbed,
 }
 
 pub struct SQLFormatter {
-    indentation: IndentationType,
+    indentation_type: IndentationType,
 }
 
 impl SQLFormatter {
     pub fn new(indentation: IndentationType) -> Self {
-        Self { indentation }
+        Self {
+            indentation_type: indentation,
+        }
     }
 
     pub fn format_string(&self, sql: &str) -> Result<String, pest::error::Error<Rule>> {
@@ -29,8 +53,7 @@ impl SQLFormatter {
             .join("\n\n"))
     }
 
-    #[allow(dead_code)]
-    pub fn format_file(&self, path: &str) -> Result<String, pest::error::Error<Rule>> {
+    pub fn format_file<P: AsRef<Path>>(&self, path: P) -> Result<String, pest::error::Error<Rule>> {
         let sql = std::fs::read_to_string(path).map_err(|_| {
             pest::error::Error::new_from_span(
                 pest::error::ErrorVariant::CustomError {
@@ -46,7 +69,8 @@ impl SQLFormatter {
         match rule.as_rule() {
             Rule::EOI => String::new(),
             Rule::COMMENT => todo!(),
-            Rule::open_paren | Rule::close_paren | Rule::comma => {
+            Rule::comma => "\t".repeat(level) + rule.as_str(),
+            Rule::open_paren | Rule::close_paren => {
                 String::from("\n") + &"\t".repeat(level) + rule.as_str()
             }
             Rule::double_quote
@@ -99,58 +123,85 @@ impl SQLFormatter {
             | Rule::order_by_block => rule
                 .into_inner()
                 .map(|pair| self.format_rule(pair, level))
-                .collect::<_>(),
+                .collect::<Vec<String>>()
+                .join("\t"),
+            Rule::block_kw => {
+                "\t".repeat(level) + &self.format_rule(rule.into_inner().next().unwrap(), level)
+            }
             Rule::select_compound
             | Rule::insert_into_compound
             | Rule::delete_from_compound
             | Rule::group_by_compound
-            | Rule::order_by_compound => rule
-                .into_inner()
-                .map(|pair| self.format_rule(pair, level))
-                .collect::<Vec<_>>()
-                .join(" "),
+            | Rule::order_by_compound => {
+                let keywords = rule
+                    .into_inner()
+                    .map(|pair| self.format_rule(pair, level))
+                    .collect::<Vec<_>>();
+
+                match self.indentation_type {
+                    IndentationType::Tabbed => keywords.join("\n"),
+                    IndentationType::Standard => keywords.join(" "),
+                }
+            }
             Rule::function => rule
                 .into_inner()
-                .map(|pair| self.format_rule(pair, level))
+                .map(|pair| self.format_rule(pair, level + 1))
                 .collect::<Vec<_>>()
-                .join(" "),
+                .join("\t"),
             Rule::inline_item | Rule::table_identifier => rule
                 .into_inner()
                 .map(|pair| self.format_rule(pair, level))
                 .collect::<Vec<_>>()
                 .join(" "),
-            Rule::list => {
-                String::from("\t")
-                    + &rule
-                        .into_inner()
-                        .map(|pair| self.format_rule(pair, level))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-            }
+            Rule::list => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Rule::list_line => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<String>>()
+                .join("\t"),
+            Rule::list_item => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
+            Rule::between => rule
+                .into_inner()
+                .map(|pair| self.format_rule(pair, level))
+                .collect::<Vec<_>>()
+                .join(" "),
             Rule::subquery => rule
                 .into_inner()
-                .map(|pair| self.format_rule(pair, level))
+                .map(|pair| match pair.as_rule() {
+                    Rule::statement => self.format_rule(pair, level + 2),
+                    _ => self.format_rule(pair, level + 1),
+                })
                 .collect::<Vec<_>>()
-                .join(" "),
+                .join("\t"),
             Rule::item_list => rule
                 .into_inner()
-                .map(|pair| self.format_rule(pair, level))
+                .map(|pair| self.format_rule(pair, level + 1))
                 .collect::<Vec<_>>()
-                .join(" "),
+                .join("\t"),
             Rule::subclause => rule
                 .into_inner()
-                .map(|pair| self.format_rule(pair, level))
+                .map(|pair| self.format_rule(pair, level + 1))
                 .collect::<Vec<_>>()
-                .join(" "),
+                .join("\n"),
             Rule::clause => {
-                let mut pairs = rule.into_inner();
-                return match pairs.next().unwrap().as_rule() {
+                let mut pairs = rule.into_inner().peekable();
+                let inner_rule = pairs.peek().unwrap();
+
+                match inner_rule.as_rule() {
                     Rule::subclause => self.format_rule(pairs.next().unwrap(), level),
                     _ => pairs
                         .map(|pair| self.format_rule(pair, level))
                         .collect::<Vec<_>>()
                         .join(" "),
-                };
+                }
             }
             Rule::statement => rule
                 .into_inner()
@@ -159,7 +210,7 @@ impl SQLFormatter {
                     Rule::delimiter => self.format_rule(pair, level),
                     _ => todo!("Unexpected rule: {:?}", pair.as_rule()),
                 })
-                .collect::<Vec<String>>()
+                .collect::<Vec<_>>()
                 .join("\n"),
             _ => todo!("Unexpected rule: {:?}", rule.as_rule()),
         }
@@ -177,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_format_sql() {
-        let sql = read_to_string("docs/output.sql").unwrap();
+        let sql = read_to_string("docs/robert.sql").unwrap();
         let formatter = SQLFormatter::new(IndentationType::Tabbed);
         let formatted = formatter.format_string(&sql);
         let mut file = OpenOptions::new()

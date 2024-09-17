@@ -9,7 +9,7 @@ single_quote = { "'" }
 delimiter    = { ";" }
 
 identifier       = @{ !block_kw ~ (ASCII_ALPHANUMERIC | "$" | "." | "_" | "*")+ }
-table_identifier =  { identifier{1,2} }
+table_identifier =  { identifier{1, 2} }
 string           =  { single_quote ~ (!single_quote ~ ANY)* ~ single_quote }
 quoted           =  { double_quote ~ (!double_quote ~ ANY)* ~ double_quote }
 
@@ -32,19 +32,19 @@ block = {
 insert_block = { &insert_into_compound ~ block_kw ~ table_identifier ~ item_list }
 select_block = { &select_compound ~ block_kw ~ list }
 update_block = { &update_kw ~ block_kw ~ table_identifier }
-delete_block = { &delete_from_compound ~block_kw ~ table_identifier }
+delete_block = { &delete_from_compound ~ block_kw ~ table_identifier }
 
-from_block   = { from_kw ~ list }
-relate_block = { relate_kw ~ list }
-where_block  = { where_kw ~ (clause | subclause) }
-and_block    = { and_kw ~ (clause | subclause) }
-or_block     = { or_kw ~ (clause | subclause) }
+from_block   = { &from_kw ~ block_kw ~ list }
+relate_block = { &relate_kw ~ block_kw ~ list }
+where_block  = { &where_kw ~ block_kw ~ (clause | subclause) }
+and_block    = { &and_kw ~ block_kw ~ (clause | subclause) }
+or_block     = { &or_kw ~ block_kw ~ (clause | subclause) }
 
-values_block = { values_kw ~ item_list }
-set_block    = { set_kw ~ list }
+values_block = { &values_kw ~ block_kw ~ item_list }
+set_block    = { &set_kw ~ block_kw ~ list }
 
-group_by_block = { group_by_compound ~ list }
-order_by_block = { order_by_compound ~ list ~ (desc_kw | asc_kw) }
+group_by_block = { &group_by_compound ~ block_kw ~ list }
+order_by_block = { &order_by_compound ~ block_kw ~ list ~ (desc_kw | asc_kw) }
 
 block_kw = {
     select_compound
@@ -90,14 +90,25 @@ delete_from_compound = { delete_kw ~ from_kw }
 group_by_compound    = { group_kw ~ by_kw }
 order_by_compound    = { order_kw ~ by_kw }
 
-inline_kw  = { (between_kw | in_kw | not_kw | is_kw | like_kw | null_kw | exists_kw) }
+inline_kw = { in_kw | not_kw | is_kw | like_kw | null_kw | exists_kw }
+in_kw     = { ^"IN" }
+not_kw    = { ^"NOT" }
+is_kw     = { ^"IS" }
+like_kw   = { ^"LIKE" }
+null_kw   = { ^"NULL" }
+exists_kw = { ^"EXISTS" }
+
+join     = { (left_kw | right_kw | full_kw | inner_kw | outer_kw)* ~ join_kw ~ identifier ~ on_kw? ~ clause ~ (and_kw ~ clause)* }
+join_kw  = { ^"JOIN" }
+left_kw  = { ^"LEFT" }
+right_kw = { ^"RIGHT" }
+full_kw  = { ^"FULL" }
+inner_kw = { ^"INNER" }
+outer_kw = { ^"OUTER" }
+on_kw    = { ^"ON" }
+
+between    = { between_kw ~ (!and_kw ~ inline_item+) ~ and_kw ~ inline_item+ }
 between_kw = { ^"BETWEEN" }
-in_kw      = { ^"IN" }
-not_kw     = { ^"NOT" }
-is_kw      = { ^"IS" }
-like_kw    = { ^"LIKE" }
-null_kw    = { ^"NULL" }
-exists_kw  = { ^"EXISTS" }
 
 operator  = { plus_op | minus_op | divide_op | gt_op | st_op | eq_op | not_eq_op | seq_op | leq_op }
 plus_op   = { "+" }
@@ -110,10 +121,12 @@ not_eq_op = { "<>" | "!=" }
 seq_op    = { "<=" }
 leq_op    = { ">=" }
 
-function = { identifier ~ open_paren ~ statement* ~ close_paren }
+function = { !inline_kw ~ identifier ~ open_paren ~ list ~ close_paren }
 
-inline_item = { (function | subquery | item_list | identifier | string | quoted | inline_kw | operator) }
-list        = { (!comma ~ inline_item)+ ~ (comma ~ inline_item+)* }
+inline_item = { between | subquery | join | function | item_list | identifier | inline_kw | string | quoted | operator }
+list_item   = { inline_item+ }
+list_line   = { comma? ~ list_item }
+list        = { list_line+ }
 
 subquery  = { open_paren ~ statement ~ close_paren }
 item_list = { open_paren ~ list ~ close_paren }
