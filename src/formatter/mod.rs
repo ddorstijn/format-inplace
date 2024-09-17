@@ -62,6 +62,9 @@ impl SQLFormatter {
                 Span::new("", 0, 0).unwrap(),
             )
         })?;
+
+        // TODO: Write back to file
+
         self.format_string(&sql)
     }
 

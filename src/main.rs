@@ -11,7 +11,7 @@ mod formatter;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "Tabbed")]
+    #[arg(short, long, default_value = "tabbed")]
     indent_type: IndentationType,
 
     #[arg(short, long, default_value_t = false)]
@@ -27,6 +27,11 @@ fn main() {
 
     if args.deamon && args.file.is_some() {
         println!("Error: Cannot specify both --deamon and --file at the same time.");
+        std::process::exit(1);
+    }
+
+    if !args.deamon && args.file.is_none() {
+        println!("Error: Must specify either --deamon or --file.");
         std::process::exit(1);
     }
 
