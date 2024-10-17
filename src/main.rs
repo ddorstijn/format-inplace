@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use clipboard::{ClipboardContext, ClipboardProvider};
 use formatter::{IndentationType, SQLFormatter};
 use get_selected_text::get_selected_text;
 use windows_hotkeys::keys::{ModKey, VKey};
@@ -46,7 +47,10 @@ fn main() {
             &[ModKey::Alt, ModKey::Shift],
             move || match get_selected_text() {
                 Ok(selected_text) => {
-                    println!("{:?}", formatter.format_string(&selected_text));
+                    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+                    println!("{:?}", ctx.get_contents());
+                    ctx.set_contents(formatter.format_string(&selected_text).unwrap())
+                        .unwrap();
                 }
                 Err(_) => {}
             },
