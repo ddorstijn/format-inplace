@@ -30,30 +30,30 @@ or	exists
     		where	nf.notification_id = par.notification_id 
     		and
 		(	
-		(	nf.filter_type = 'RN' 
-		and	r.relation_id = nf.relation_id
-		) 
-        	or 	
-		(	nf.filter_type = 'PC' 
-		and	r.postal_code = nf.postal_code
-		) 
-        	or 	
-		(	nf.filter_type = 'PR' 
-		and	to_integer
-			(	substr
-				(	r.postal_code
-				,	1
-				,	4
+			(	nf.filter_type = 'RN' 
+			and	r.relation_id = nf.relation_id
+			) 
+			or 	
+			(	nf.filter_type = 'PC' 
+			and	r.postal_code = nf.postal_code
+			) 
+			or 	
+			(	nf.filter_type = 'PR' 
+			and	to_integer
+				(	substr
+					(	r.postal_code
+					,	1
+					,	4
+					)
 				)
+				between
+					nf.postal_code_start 
+				and 
+					nf.postal_code_end
 			)
-			between
-				nf.postal_code_start 
-			and 
-				nf.postal_code_end
 		)
-        	)
-    	)
-) 
+	)
+)
 and
 (	not exists
 	(	select	'' 

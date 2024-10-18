@@ -37,7 +37,10 @@ fn main() {
     }
 
     if let Some(file) = args.file {
-        formatter.format_file(file).unwrap();
+        println!("Formatting file: {:?}", file);
+        let formatted = formatter.format_file(file).unwrap();
+
+        println!("{}", formatted);
     }
 
     if args.deamon {
