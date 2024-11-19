@@ -1,65 +1,28 @@
-use std::path::PathBuf;
-
-use clap::Parser;
 use clipboard::{ClipboardContext, ClipboardProvider};
-use formatter::{IndentationType, SQLFormatter};
+use formatter::SQLFormatter;
 use get_selected_text::get_selected_text;
 use windows_hotkeys::keys::{ModKey, VKey};
 use windows_hotkeys::{HotkeyManager, HotkeyManagerImpl};
 
 mod formatter;
 
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[arg(short, long, default_value = "tabbed")]
-    indent_type: IndentationType,
-
-    #[arg(short, long, default_value_t = false)]
-    deamon: bool,
-
-    #[arg(short, long, value_name = "FILE")]
-    file: Option<PathBuf>,
-}
-
 fn main() {
-    let args = Args::parse();
-    let formatter = SQLFormatter::new(args.indent_type);
+    let formatter = SQLFormatter;
 
-    if args.deamon && args.file.is_some() {
-        println!("Error: Cannot specify both --deamon and --file at the same time.");
-        std::process::exit(1);
-    }
+    let mut hkm = HotkeyManager::new();
+    hkm.register(
+        VKey::F,
+        &[ModKey::Alt, ModKey::Shift],
+        move || match get_selected_text() {
+            Ok(selected_text) => {
+                let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+                ctx.set_contents(formatter.format_string(&selected_text).unwrap())
+                    .unwrap();
+            }
+            Err(_) => {}
+        },
+    )
+    .unwrap();
 
-    if !args.deamon && args.file.is_none() {
-        println!("Error: Must specify either --deamon or --file.");
-        std::process::exit(1);
-    }
-
-    if let Some(file) = args.file {
-        println!("Formatting file: {:?}", file);
-        let formatted = formatter.format_file(file).unwrap();
-
-        println!("{}", formatted);
-    }
-
-    if args.deamon {
-        let mut hkm = HotkeyManager::new();
-        hkm.register(
-            VKey::F,
-            &[ModKey::Alt, ModKey::Shift],
-            move || match get_selected_text() {
-                Ok(selected_text) => {
-                    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-                    println!("{:?}", ctx.get_contents());
-                    ctx.set_contents(formatter.format_string(&selected_text).unwrap())
-                        .unwrap();
-                }
-                Err(_) => {}
-            },
-        )
-        .unwrap();
-
-        hkm.event_loop();
-    }
+    hkm.event_loop();
 }
