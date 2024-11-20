@@ -8,12 +8,21 @@ struct SQLParser;
 #[derive(Debug, Default)]
 struct Line {
     start: String,
-    elements: String,
+    elements: Vec<String>,
+}
+
+impl Line {
+    pub fn from_start(start: Pair<Rule>) -> Self {
+        Self {
+            start: start.as_str().to_string(),
+            elements: Vec::new(),
+        }
+    }
 }
 
 impl std::fmt::Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\t{}", self.start, self.elements)
+        write!(f, "{}\t{}", self.start, self.elements.join(" "))
     }
 }
 
@@ -37,10 +46,7 @@ impl SQLFormatter {
     }
 
     fn format_comment(&self, rule: Pair<Rule>) -> Line {
-        Line {
-            start: rule.as_str().to_string(),
-            elements: String::new(),
-        }
+        Line::from_start(rule)
     }
 
     fn format_element(&self, rule: Pair<Rule>) -> FormatElementResult {
@@ -49,10 +55,7 @@ impl SQLFormatter {
             Rule::identifier | Rule::operator | Rule::string | Rule::quoted => {
                 FormatElementResult::String(pair.as_str().to_string())
             }
-            Rule::comma => FormatElementResult::Lines(vec![Line {
-                start: pair.as_str().to_string(),
-                elements: String::new(),
-            }]),
+            Rule::comma => FormatElementResult::Lines(vec![Line::from_start(pair)]),
             Rule::paren => FormatElementResult::Lines(self.format_paren(pair)),
             Rule::between => todo!(),
             Rule::case => todo!(),
@@ -66,37 +69,16 @@ impl SQLFormatter {
 
         for pair in rule.into_inner() {
             match pair.as_rule() {
-                Rule::open_paren | Rule::close_paren => lines.push(Line {
-                    start: pair.as_str().to_string(),
-                    elements: String::new(),
-                }),
+                Rule::open_paren | Rule::close_paren => lines.push(Line::from_start(pair)),
                 Rule::block => lines.append(&mut self.format_block(pair)),
                 Rule::element => match self.format_element(pair) {
                     FormatElementResult::String(s) => {
-                        let last_line: &mut Line = match lines.last_mut() {
-                            Some(line) => line,
-                            None => {
-                                lines.push(Line {
-                                    start: String::new(),
-                                    elements: String::new(),
-                                });
-                                lines.last_mut().unwrap()
-                            }
-                        };
-
-                        if last_line.elements.len() == 0 {
-                            last_line.elements.push(' ');
-                        }
-
-                        last_line.elements.push_str(&s);
+                        lines.last_mut().unwrap().elements.push(s);
                     }
                     FormatElementResult::Lines(mut l) => lines.append(&mut l),
                 },
                 Rule::and_kw | Rule::or_kw => {
-                    lines.push(Line {
-                        start: pair.as_str().to_string(),
-                        elements: String::new(),
-                    });
+                    lines.push(Line::from_start(pair));
                 }
                 Rule::COMMENT => lines.push(self.format_comment(pair)),
                 _ => unreachable!("Unexpected rule: {:?}", pair),
@@ -111,19 +93,9 @@ impl SQLFormatter {
 
         for pair in rule.into_inner() {
             match pair.as_rule() {
-                Rule::block_kw => lines.push(Line {
-                    start: pair.as_str().to_string(),
-                    elements: String::new(),
-                }),
+                Rule::block_kw => lines.push(Line::from_start(pair)),
                 Rule::element => match self.format_element(pair) {
-                    FormatElementResult::String(s) => {
-                        let last_line = lines.last_mut().unwrap();
-                        if last_line.elements.len() == 0 {
-                            last_line.elements.push(' ');
-                        }
-
-                        last_line.elements.push_str(&s);
-                    }
+                    FormatElementResult::String(s) => lines.last_mut().unwrap().elements.push(s),
                     FormatElementResult::Lines(mut l) => lines.append(&mut l),
                 },
                 Rule::COMMENT => lines.push(self.format_comment(pair)),
@@ -139,10 +111,7 @@ impl SQLFormatter {
             .flat_map(|pair| match pair.as_rule() {
                 Rule::block => self.format_block(pair),
                 Rule::COMMENT => vec![self.format_comment(pair)],
-                Rule::delimiter => vec![Line {
-                    start: pair.as_str().to_string(),
-                    elements: String::new(),
-                }],
+                Rule::delimiter => vec![Line::from_start(pair)],
                 _ => unreachable!("Unexpected rule: {:?}", pair),
             })
             .collect()
@@ -154,10 +123,7 @@ impl SQLFormatter {
             .flat_map(|pair| match pair.as_rule() {
                 Rule::statement => self.format_statement(pair),
                 Rule::COMMENT => vec![self.format_comment(pair)],
-                Rule::EOI => vec![Line {
-                    start: pair.as_str().to_string(),
-                    elements: String::new(),
-                }],
+                Rule::EOI => vec![Line::from_start(pair)],
                 _ => unreachable!("Unexpected rule: {:?}", pair),
             })
             .collect()
