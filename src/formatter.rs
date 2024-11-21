@@ -77,29 +77,32 @@ fn format_comment(rule: Pair<Rule>, indent: usize) -> Line {
     Line::from_start(rule, indent)
 }
 
+fn should_block(last_line: &Line) -> bool {
+    println!(
+        "{:?}, {}",
+        last_line.start.as_ref().unwrap().as_rule(),
+        last_line.elements.len()
+    );
+    if let Some(start) = &last_line.start {
+        matches!(start.as_rule(), Rule::and_kw | Rule::or_kw | Rule::block_kw)
+            && last_line.elements.is_empty()
+    } else {
+        false
+    }
+}
+
 fn format_case(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
     let mut lines = Vec::new();
 
     for pair in rule.into_inner() {
         match pair.as_rule() {
             Rule::case_kw | Rule::end_kw => lines.push(Line::from_start(pair.clone(), indent)),
-            Rule::element => match format_element(
-                pair.clone(),
-                indent,
-                match lines.last().unwrap().start.as_ref().unwrap().as_rule() {
-                    Rule::or_kw | Rule::and_kw => {
-                        if lines.last().unwrap().elements.is_empty() {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                },
-            ) {
-                FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
-                FormatElementResult::Lines(mut l) => lines.append(&mut l),
-            },
+            Rule::element => {
+                match format_element(pair, indent, should_block(lines.last().unwrap())) {
+                    FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
+                    FormatElementResult::Lines(mut l) => lines.append(&mut l),
+                }
+            }
             Rule::and_kw | Rule::or_kw => {
                 lines.last_mut().unwrap().elements.push(pair.clone());
             }
@@ -123,23 +126,12 @@ fn format_join(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
             | Rule::inner_kw
             | Rule::outer_kw
             | Rule::join_kw => lines.push(Line::from_start(pair, indent)),
-            Rule::element => match format_element(
-                pair,
-                indent,
-                match lines.last().unwrap().start.as_ref().unwrap().as_rule() {
-                    Rule::or_kw | Rule::and_kw => {
-                        if lines.last().unwrap().elements.is_empty() {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                },
-            ) {
-                FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
-                FormatElementResult::Lines(mut l) => lines.append(&mut l),
-            },
+            Rule::element => {
+                match format_element(pair, indent, should_block(lines.last().unwrap())) {
+                    FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
+                    FormatElementResult::Lines(mut l) => lines.append(&mut l),
+                }
+            }
             Rule::on_kw | Rule::and_kw => {
                 lines.push(Line::from_start(pair, indent));
             }
@@ -157,10 +149,12 @@ fn format_between(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
     for pair in rule.into_inner() {
         match pair.as_rule() {
             Rule::between_kw => lines.push(Line::from_start(pair, indent)),
-            Rule::element => match format_element(pair, indent, false) {
-                FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
-                FormatElementResult::Lines(mut l) => lines.append(&mut l),
-            },
+            Rule::element => {
+                match format_element(pair, indent, should_block(lines.last().unwrap())) {
+                    FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
+                    FormatElementResult::Lines(mut l) => lines.append(&mut l),
+                }
+            }
             Rule::and_kw => {
                 lines.push(Line::from_start(pair, indent));
             }
@@ -179,7 +173,13 @@ fn format_element(rule: Pair<Rule>, indent: usize, block: bool) -> FormatElement
             FormatElementResult::Rule(pair)
         }
         Rule::comma => FormatElementResult::Lines(vec![Line::from_start(pair, indent)]),
-        Rule::paren => FormatElementResult::Lines(format_paren(pair, indent + 1)),
+        Rule::paren => FormatElementResult::Lines(format_paren(
+            pair,
+            match block {
+                true => indent,
+                false => indent + 1,
+            },
+        )),
         Rule::between => FormatElementResult::Lines(format_between(pair, indent + 1)),
         Rule::case => FormatElementResult::Lines(format_case(pair, indent + 1)),
         Rule::join => FormatElementResult::Lines(format_join(pair, indent + 1)),
@@ -194,10 +194,12 @@ fn format_paren(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
         match pair.as_rule() {
             Rule::open_paren | Rule::close_paren => lines.push(Line::from_start(pair, indent)),
             Rule::block => lines.append(&mut format_block(pair, indent + 1)),
-            Rule::element => match format_element(pair, indent, false) {
-                FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
-                FormatElementResult::Lines(mut l) => lines.append(&mut l),
-            },
+            Rule::element => {
+                match format_element(pair, indent, should_block(lines.last().unwrap())) {
+                    FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
+                    FormatElementResult::Lines(mut l) => lines.append(&mut l),
+                }
+            }
             Rule::and_kw | Rule::or_kw => {
                 lines.push(Line::from_start(pair, indent));
             }
@@ -217,10 +219,12 @@ fn format_block(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
             Rule::block_kw | Rule::and_kw | Rule::or_kw => {
                 lines.push(Line::from_start(pair, indent))
             }
-            Rule::element => match format_element(pair, indent, true) {
-                FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
-                FormatElementResult::Lines(mut l) => lines.append(&mut l),
-            },
+            Rule::element => {
+                match format_element(pair, indent, should_block(lines.last().unwrap())) {
+                    FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
+                    FormatElementResult::Lines(mut l) => lines.append(&mut l),
+                }
+            }
             Rule::COMMENT => lines.push(format_comment(pair, indent)),
             _ => unreachable!("Unexpected rule: {:?}", pair),
         }

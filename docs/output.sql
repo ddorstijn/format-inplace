@@ -10,65 +10,65 @@ select	par.notification_id "NOTIFICATION_ID"
 from	import_not_relations_of_filter par
 ,	relation r
 where	
-	(	par.relation_id is null
-	or	r.relation_id = par.relation_id
-	)	
+(	par.relation_id is null
+or	r.relation_id = par.relation_id
+)	
 and	
-	(	not exists
-		(	select	''
-			from	notification_filter nf
-			where	nf.notification_id = par.notification_id
-			and	nf.filter_type in
-				(	'RN'
-				,	'PC'
-				,	'PR'
-				)	
-		)	
-	or	exists
-		(	select	''
-			from	notification_filter nf
-			where	nf.notification_id = par.notification_id
-			and	
-				(	
-					(	nf.filter_type = 'RN'
-					and	r.relation_id = nf.relation_id
-					)	
-				or	
-					(	nf.filter_type = 'PC'
-					and	r.postal_code = nf.postal_code
-					)	
-				or	
-					(	nf.filter_type = 'PR'
-					and	to_integer
-						(	substr
-							(	r.postal_code
-							,	1
-							,	4
-							)	
-						)	
-						between	nf.postal_code_start
-						and	nf.postal_code_end
+(	not exists
+	(	select	''
+		from	notification_filter nf
+		where	nf.notification_id = par.notification_id
+		and	nf.filter_type in
+			(	'RN'
+			,	'PC'
+			,	'PR'
+			)	
+	)	
+or	exists
+	(	select	''
+		from	notification_filter nf
+		where	nf.notification_id = par.notification_id
+		and	
+		(	
+			(	nf.filter_type = 'RN'
+			and	r.relation_id = nf.relation_id
+			)	
+		or	
+			(	nf.filter_type = 'PC'
+			and	r.postal_code = nf.postal_code
+			)	
+		or	
+			(	nf.filter_type = 'PR'
+			and	to_integer
+				(	substr
+					(	r.postal_code
+					,	1
+					,	4
 					)	
 				)	
+				between	nf.postal_code_start
+				and	nf.postal_code_end
+			)	
 		)	
 	)	
+)	
 and	
-	(	not exists
-		(	select	''
-			from	notification_filter nf
-			where	nf.notification_id = par.notification_id
-			and	nf.filter_type = 'PY'
-		)	
-	or	exists
-		(	select	''
-			from	notification_filter nf
-			,	recipient rt
-			,	delivery_address da
-			where	rt.recipient_id = r.relation_id
-			and	nf.notification_id = par.notification_id
-			and	da.poultry_on_premises = nf.has_poultry
-		)	
+(	not exists
+	(	select	''
+		from	notification_filter nf
+		where	nf.notification_id = par.notification_id
+		and	nf.filter_type = 'PY'
 	)	
+or	exists
+	(	select	''
+		from	notification_filter nf
+		,	recipient rt
+		,	delivery_address da
+		where	rt.recipient_id = r.relation_id
+		and	nf.notification_id = par.notification_id
+		and	da.poultry_on_premises = nf.has_poultry
+	)	
+)	
 and	not exists
 	(	select	''
 		from	notification_relation nr
@@ -114,6 +114,5 @@ from	table_a a
 ;	
 	
 	
-;	
-	
+
 	
