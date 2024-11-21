@@ -41,13 +41,21 @@ fn format_query() -> Result<(), Box<dyn std::error::Error>> {
 
     sleep(std::time::Duration::from_millis(50));
 
-    let selected_text = clipboard.get_text()?;
+    let selected_text = match clipboard.get_text() {
+        Ok(t) => t,
+        Err(_) => {
+            // One more retry
+            println!("No clipboard entry found. Retrying...");
+            sleep(std::time::Duration::from_millis(500));
+            clipboard.get_text()?
+        }
+    };
 
     if let Ok(formatted_text) = format_string(&selected_text) {
         println!("--- Formatted query: \n {}", formatted_text);
         clipboard.set_text(formatted_text)?;
 
-        sleep(std::time::Duration::from_millis(50));
+        sleep(std::time::Duration::from_millis(500));
 
         // Paste formatted text
         enigo.key(enigo::Key::Control, enigo::Direction::Press)?;

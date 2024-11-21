@@ -157,20 +157,7 @@ fn format_between(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
     for pair in rule.into_inner() {
         match pair.as_rule() {
             Rule::between_kw => lines.push(Line::from_start(pair, indent)),
-            Rule::element => match format_element(
-                pair,
-                indent,
-                match lines.last().unwrap().start.as_ref().unwrap().as_rule() {
-                    Rule::or_kw | Rule::and_kw => {
-                        if lines.last().unwrap().elements.is_empty() {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                },
-            ) {
+            Rule::element => match format_element(pair, indent, false) {
                 FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
                 FormatElementResult::Lines(mut l) => lines.append(&mut l),
             },
@@ -192,13 +179,7 @@ fn format_element(rule: Pair<Rule>, indent: usize, block: bool) -> FormatElement
             FormatElementResult::Rule(pair)
         }
         Rule::comma => FormatElementResult::Lines(vec![Line::from_start(pair, indent)]),
-        Rule::paren => FormatElementResult::Lines(format_paren(
-            pair,
-            match block {
-                true => indent,
-                false => indent + 1,
-            },
-        )),
+        Rule::paren => FormatElementResult::Lines(format_paren(pair, indent + 1)),
         Rule::between => FormatElementResult::Lines(format_between(pair, indent + 1)),
         Rule::case => FormatElementResult::Lines(format_case(pair, indent + 1)),
         Rule::join => FormatElementResult::Lines(format_join(pair, indent + 1)),
@@ -213,20 +194,7 @@ fn format_paren(rule: Pair<Rule>, indent: usize) -> Vec<Line> {
         match pair.as_rule() {
             Rule::open_paren | Rule::close_paren => lines.push(Line::from_start(pair, indent)),
             Rule::block => lines.append(&mut format_block(pair, indent + 1)),
-            Rule::element => match format_element(
-                pair,
-                indent,
-                match lines.last().unwrap().start.as_ref().unwrap().as_rule() {
-                    Rule::or_kw | Rule::and_kw => {
-                        if lines.last().unwrap().elements.is_empty() {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                },
-            ) {
+            Rule::element => match format_element(pair, indent, false) {
                 FormatElementResult::Rule(p) => lines.last_mut().unwrap().elements.push(p),
                 FormatElementResult::Lines(mut l) => lines.append(&mut l),
             },
