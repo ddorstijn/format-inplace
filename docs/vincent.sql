@@ -97,3 +97,21 @@ select	batchrunner.xml_export
 	,	r.name
 	)
 from	relation r
+;
+
+invoke	batchrunner.xml_import
+(	'import_not_relations_of_filter'
+,	case
+		when exists
+			(	select	''
+			from	notification_filter nf
+			where	nf.filter_type = 'PY'
+			)
+		then	1
+		else	0
+	end
+)
+from	table_a a
+	join	relation r
+	on	r.name = a.x
+;

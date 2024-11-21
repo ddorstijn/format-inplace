@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clipboard = "0.5.0"
+arboard = "3.4.1"
+enigo = "0.2.1"
 get-selected-text = "0.1.6"
-pest = { version = "2.7.12", features = ["pretty-print"] }
-pest_derive = "2.7.12"
+pest = { version = "2.7.14", features = ["pretty-print"] }
+pest_derive = "2.7.14"
 windows-hotkeys = "0.2.1"

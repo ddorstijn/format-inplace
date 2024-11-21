@@ -9,12 +9,12 @@ single_quote = { "'" }
 delimiter    = { ";" }
 
 identifier = @{ (ASCII_ALPHANUMERIC | "$" | "." | "_" | "*")+ }
-element    =  { !block_kw ~ (identifier | operator | comma | between | paren | case | string | quoted | join) }
+element    =  { !(block_kw | and_kw | or_kw) ~ (operator | comma | between | paren | case | string | quoted | join | identifier) }
 string     =  { single_quote ~ (!single_quote ~ ANY)* ~ single_quote }
 quoted     =  { double_quote ~ (!double_quote ~ ANY)* ~ double_quote }
 operator   =  { ">=" | "<>" | "!=" | "<=" | "+" | "-" | "/" | ">" | "<" | "=" }
 
-block    = { block_kw+ ~ element* }
+block    = { (block_kw | and_kw | or_kw)+ ~ element* }
 block_kw = {
     select_kw
   | distinct_kw
@@ -25,11 +25,10 @@ block_kw = {
   | update_kw
   | set_kw
   | delete_kw
+  | invoke_kw
   | from_kw
   | relate_kw
   | where_kw
-  | and_kw
-  | or_kw
   | group_kw
   | by_kw
   | order_kw
@@ -46,6 +45,7 @@ values_kw   = { ^"VALUES" }
 update_kw   = { ^"UPDATE" }
 set_kw      = { ^"SET" }
 delete_kw   = { ^"DELETE" }
+invoke_kw   = { ^"INVOKE" }
 from_kw     = { ^"FROM" }
 relate_kw   = { ^"RELATE" }
 where_kw    = { ^"WHERE" }
@@ -57,7 +57,7 @@ order_kw    = { ^"ORDER" }
 desc_kw     = { ^"DESC" }
 asc_kw      = { ^"ASC" }
 
-join     = { (left_kw | right_kw | full_kw | inner_kw | outer_kw)* ~ join_kw ~ element ~ on_kw? ~ element ~ (and_kw ~ element+)* }
+join     = { (left_kw | right_kw | full_kw | inner_kw | outer_kw)* ~ join_kw ~ (!(comma | block_kw) ~ (on_kw | and_kw | element))+ }
 join_kw  = { ^"JOIN" }
 left_kw  = { ^"LEFT" }
 right_kw = { ^"RIGHT" }
@@ -66,11 +66,13 @@ inner_kw = { ^"INNER" }
 outer_kw = { ^"OUTER" }
 on_kw    = { ^"ON" }
 
-between    = { between_kw ~ (!and_kw ~ element+) ~ and_kw ~ element+ }
+between    = { between_kw ~ (!and_kw ~ element)+ ~ and_kw ~ element+ }
 between_kw = { ^"BETWEEN" }
 
-case    = { case_kw ~ (!end_kw ~ element+) ~ end_kw }
+case    = { case_kw ~ (!end_kw ~ (when_kw | else_kw | element))+ ~ end_kw }
 case_kw = { ^"CASE" }
+when_kw = { ^"WHEN" }
+else_kw = { ^"ELSE" }
 end_kw  = { ^"END" }
 
 paren = { open_paren ~ ((and_kw | or_kw | element)+ | block+)* ~ close_paren }
